@@ -11,10 +11,11 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox
 
-from . import engine, voice
+from aris_masten import engine, voice
 
 ROOT = Path(__file__).resolve().parents[1]
-VOSK = Path(os.environ.get("ARIS_VOSK_MODEL", str(ROOT / "vosk-model")))
+BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", ROOT))
+VOSK = Path(os.environ.get("ARIS_VOSK_MODEL", str(BUNDLE_ROOT / "vosk-model")))
 BG, PANEL, BLUE, PURPLE, WHITE = "#050914", "#0d1729", "#27baff", "#aa82ff", "#eaf6ff"
 
 
