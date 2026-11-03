@@ -33,9 +33,30 @@ def listen_once(model_path: str, seconds: int = 8, device=None):
     rate = int(info["default_samplerate"])
     if rate < 8000:
         raise RuntimeError(f"Taxa de entrada inválida: {rate}")
-    frames = sd.rec(int(seconds * rate), samplerate=rate,
-                    channels=1, dtype="int16", device=device)
-    sd.wait()
+    # End after silence, rather than waiting the full timeout for every utterance.
+    import time
+    chunks = []
+    peak = 0
+    speech_started = False
+    last_loud = None
+    started = time.monotonic()
+    block = max(512, int(rate * 0.08))
+    with sd.InputStream(samplerate=rate, channels=1, dtype="int16",
+                        device=device, blocksize=block) as stream:
+        while time.monotonic() - started < seconds:
+            frames, overflowed = stream.read(block)
+            chunks.append(frames.copy())
+            level = int(np.max(np.abs(frames.astype(np.int32))))
+            peak = max(peak, level)
+            if level > 550:
+                speech_started = True
+                last_loud = time.monotonic()
+            if speech_started and last_loud is not None:
+                if time.monotonic() - last_loud > 0.95:
+                    break
+    if not chunks:
+        raise RuntimeError("Nenhum áudio recebido do microfone.")
+    frames = np.concatenate(chunks, axis=0)
     samples = frames[:, 0].astype(np.float32)
     divisor = math.gcd(rate, 16000)
     converted = resample_poly(samples, 16000 // divisor, rate // divisor)
@@ -43,8 +64,7 @@ def listen_once(model_path: str, seconds: int = 8, device=None):
     recognizer = KaldiRecognizer(Model(str(path)), 16000)
     recognizer.AcceptWaveform(pcm)
     final = json.loads(recognizer.FinalResult()).get("text", "").strip()
-    peak = int(np.max(np.abs(samples))) if len(samples) else 0
-    return final, {"device": info["name"], "sample_rate": rate, "peak": peak}
+    return final, {"device": info["name"], "sample_rate": rate, "peak": peak, "speech_detected": speech_started}
 
 async def synthesize(profile: str, text: str, destination: str):
     import edge_tts
