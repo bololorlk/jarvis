@@ -35,6 +35,13 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed --name ARIS-MASTEN --paths . --add-data "vosk-model;vosk-model" --collect-all vosk --collect-all sounddevice --collect-all edge_tts aris_masten/desktop.py
+      - name: Verify executable exists
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/ARIS-MASTEN.exe")) { throw "EXE missing after build" }
+          $size = (Get-Item "dist/ARIS-MASTEN.exe").Length
+          if ($size -lt 1000000) { throw "EXE unexpectedly small: $size bytes" }
+          Write-Host "EXE verified: $size bytes"
       - name: Publish direct EXE download (no ZIP)
         shell: pwsh
         env:
@@ -42,8 +49,3 @@ jobs:
         run: |
           $tag = "aris-masten-build-${{ github.run_number }}"
           gh release create $tag "dist/ARIS-MASTEN.exe" --repo "${{ github.repository }}" --title "ARIS / MASTEN Windows - Build ${{ github.run_number }}" --notes "Windows executable built from commit ${{ github.sha }}. Requires Ollama and qwen2.5:3b. Download the .exe directly, without extracting ZIP." --latest
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ARIS-MASTEN-Windows
-          path: dist/ARIS-MASTEN.exe
-          if-no-files-found: error
