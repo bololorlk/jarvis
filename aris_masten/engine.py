@@ -77,11 +77,11 @@ def ask(profile: str, prompt: str) -> str:
     ensure_ollama()
     history = load_history()
     messages = [{"role": "system", "content": SYSTEM[profile]}]
-    messages += history[profile][-10:]
+    messages += history[profile][-6:]
     messages.append({"role": "user", "content": prompt})
     body = json.dumps({
-        "model": MODEL, "stream": False, "keep_alive": "10m",
-        "options": {"num_predict": 180, "num_ctx": 2048},
+        "model": MODEL, "stream": False, "keep_alive": "30m",
+        "options": {"num_predict": 96, "num_ctx": 1536, "temperature": 0.5},
         "messages": messages
     }, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
@@ -102,7 +102,7 @@ def ask(profile: str, prompt: str) -> str:
     history[profile] = (history[profile] + [
         {"role": "user", "content": prompt},
         {"role": "assistant", "content": answer}
-    ])[-12:]
+    ])[-8:]
     save_history(history)
     return answer
 
