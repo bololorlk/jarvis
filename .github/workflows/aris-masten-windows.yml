@@ -6,6 +6,8 @@ on:
     paths:
       - "aris_masten/**"
       - ".github/workflows/aris-masten-windows.yml"
+permissions:
+  contents: write
 jobs:
   windows-exe:
     runs-on: windows-latest
@@ -33,6 +35,13 @@ jobs:
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed --name ARIS-MASTEN --paths . --add-data "vosk-model;vosk-model" --collect-all vosk --collect-all sounddevice --collect-all edge_tts aris_masten/desktop.py
+      - name: Publish direct EXE download (no ZIP)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "aris-masten-build-${{ github.run_number }}"
+          gh release create $tag "dist/ARIS-MASTEN.exe" --repo "${{ github.repository }}" --title "ARIS / MASTEN Windows - Build ${{ github.run_number }}" --notes "Windows executable built from commit ${{ github.sha }}. Requires Ollama and qwen2.5:3b. Download the .exe directly, without extracting ZIP." --latest
       - uses: actions/upload-artifact@v4
         with:
           name: ARIS-MASTEN-Windows
