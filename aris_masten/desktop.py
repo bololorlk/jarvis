@@ -118,7 +118,7 @@ class Desktop:
         self.output.configure(state="normal")
         self.output.delete("1.0", "end")
         for who, msg in self.logs[self.profile]:
-            self.output.insert("end", who + ": " + msg + "\\n\\n")
+            self.output.insert("end", who + ": " + msg + "\n\n")
         self.output.configure(state="disabled")
         self.output.see("end")
 
