@@ -1,0 +1,35 @@
+name: ARIS MASTEN Windows build
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/aris-masten-windows]
+    paths:
+      - "aris_masten/**"
+      - ".github/workflows/aris-masten-windows.yml"
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r aris_masten/requirements.txt pyinstaller==6.16.0
+      - name: Download offline Portuguese speech model
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip" -OutFile "vosk-pt.zip"
+          Expand-Archive "vosk-pt.zip" -DestinationPath "." -Force
+          Rename-Item "vosk-model-small-pt-0.3" "vosk-model"
+      - name: Build desktop EXE
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name ARIS-MASTEN --paths . --add-data "vosk-model;vosk-model" --collect-all vosk --collect-all sounddevice --collect-all edge_tts aris_masten/desktop.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ARIS-MASTEN-Windows
+          path: dist/ARIS-MASTEN.exe
