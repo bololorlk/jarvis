@@ -23,7 +23,7 @@ def listen_once(model_path: str, seconds: int = 8, device=None):
     """Record one bounded utterance and return (recognized_text, diagnostic)."""
     import numpy as np
     import sounddevice as sd
-        from vosk import Model, KaldiRecognizer, SetLogLevel
+    from vosk import Model, KaldiRecognizer, SetLogLevel
 
     path = Path(model_path)
     if not (path / "am").exists():
