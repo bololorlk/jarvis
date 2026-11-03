@@ -36,10 +36,45 @@ def save_history(history):
     temp.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
     temp.replace(HISTORY)
 
+def ensure_ollama():
+    """Start installed Ollama if necessary; fail with actionable instructions."""
+    import shutil
+    import time
+    try:
+        with urllib.request.urlopen(BASE + "/api/tags", timeout=3) as r:
+            tags = json.load(r)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        binary = shutil.which("ollama")
+        if not binary and os.name == "nt":
+            candidate = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe"
+            if candidate.is_file():
+                binary = str(candidate)
+        if not binary:
+            raise RuntimeError("Ollama não instalado. Instale pelo site oficial ollama.com.")
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.Popen([binary, "serve"], creationflags=flags,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        tags = None
+        for _ in range(15):
+            time.sleep(1)
+            try:
+                with urllib.request.urlopen(BASE + "/api/tags", timeout=3) as r:
+                    tags = json.load(r)
+                break
+            except (urllib.error.URLError, TimeoutError, OSError):
+                continue
+        if tags is None:
+            raise RuntimeError("Ollama não iniciou. Abra o Ollama pelo menu Iniciar.")
+    models = [m.get("name", "") for m in tags.get("models", [])]
+    if MODEL not in models:
+        raise RuntimeError(f"Modelo {MODEL} não instalado. Execute no terminal: ollama pull {MODEL}")
+
+
 def ask(profile: str, prompt: str) -> str:
     profile = profile.upper()
     if profile not in SYSTEM:
         raise ValueError("Perfil desconhecido")
+    ensure_ollama()
     history = load_history()
     messages = [{"role": "system", "content": SYSTEM[profile]}]
     messages += history[profile][-10:]
