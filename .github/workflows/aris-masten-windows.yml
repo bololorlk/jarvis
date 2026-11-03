@@ -2,7 +2,7 @@ name: ARIS MASTEN Windows build
 on:
   workflow_dispatch:
   push:
-    branches: [feature/aris-masten-windows]
+    branches: [main, feature/aris-masten-windows]
     paths:
       - "aris_masten/**"
       - ".github/workflows/aris-masten-windows.yml"
@@ -25,6 +25,10 @@ jobs:
           Invoke-WebRequest -Uri "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip" -OutFile "vosk-pt.zip"
           Expand-Archive "vosk-pt.zip" -DestinationPath "." -Force
           Rename-Item "vosk-model-small-pt-0.3" "vosk-model"
+      - name: Verify Python syntax
+        shell: pwsh
+        run: |
+          python -m compileall -q aris_masten
       - name: Build desktop EXE
         shell: pwsh
         run: |
@@ -33,3 +37,4 @@ jobs:
         with:
           name: ARIS-MASTEN-Windows
           path: dist/ARIS-MASTEN.exe
+          if-no-files-found: error
