@@ -48,4 +48,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "aris-masten-build-${{ github.run_number }}"
-          gh release create $tag "dist/ARIS-MASTEN.exe" --repo "${{ github.repository }}" --title "ARIS / MASTEN Windows - Build ${{ github.run_number }}" --notes "Windows executable built from commit ${{ github.sha }}. Requires Ollama and qwen2.5:3b. Download the .exe directly, without extracting ZIP." --latest
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag "dist/ARIS-MASTEN.exe" --clobber --repo "${{ github.repository }}"
+          } else {
+            gh release create $tag "dist/ARIS-MASTEN.exe" --repo "${{ github.repository }}" --title "ARIS / MASTEN Windows - Build ${{ github.run_number }}" --notes "Requires Ollama and qwen2.5:3b. Download the EXE directly." --latest
+          }
