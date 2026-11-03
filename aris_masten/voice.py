@@ -8,10 +8,11 @@ adapter, not silently simulated.
 from __future__ import annotations
 import asyncio
 import json
-import math
 import os
 import tempfile
 from pathlib import Path
+
+_MODEL_CACHE = {}
 
 VOICES = {
     "ARIS": {"voice": "pt-BR-AntonioNeural", "rate": "+0%", "pitch": "-12Hz"},
@@ -22,8 +23,7 @@ def listen_once(model_path: str, seconds: int = 8, device=None):
     """Record one bounded utterance and return (recognized_text, diagnostic)."""
     import numpy as np
     import sounddevice as sd
-    from scipy.signal import resample_poly
-    from vosk import Model, KaldiRecognizer, SetLogLevel
+        from vosk import Model, KaldiRecognizer, SetLogLevel
 
     path = Path(model_path)
     if not (path / "am").exists():
@@ -58,10 +58,17 @@ def listen_once(model_path: str, seconds: int = 8, device=None):
         raise RuntimeError("Nenhum áudio recebido do microfone.")
     frames = np.concatenate(chunks, axis=0)
     samples = frames[:, 0].astype(np.float32)
-    divisor = math.gcd(rate, 16000)
-    converted = resample_poly(samples, 16000 // divisor, rate // divisor)
+    # Linear interpolation avoids scipy's dynamic imports in packaged EXEs.
+    # Use sample positions in the input rate for deterministic 16 kHz PCM.
+    output_count = max(1, int(round(len(samples) * 16000 / rate)))
+    positions = np.arange(output_count, dtype=np.float64) * (rate / 16000.0)
+    converted = np.interp(positions, np.arange(len(samples)), samples)
     pcm = np.clip(converted, -32768, 32767).astype(np.int16).tobytes()
-    recognizer = KaldiRecognizer(Model(str(path)), 16000)
+    model = _MODEL_CACHE.get(str(path))
+    if model is None:
+        model = Model(str(path))
+        _MODEL_CACHE[str(path)] = model
+    recognizer = KaldiRecognizer(model, 16000)
     recognizer.AcceptWaveform(pcm)
     final = json.loads(recognizer.FinalResult()).get("text", "").strip()
     return final, {"device": info["name"], "sample_rate": rate, "peak": peak, "speech_detected": speech_started}
