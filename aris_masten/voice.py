@@ -30,12 +30,12 @@ def resolve_vosk_model(model_path: str) -> Path:
     candidates = [base, base / "vosk-model-small-pt-0.3", local,
                   local / "vosk-model-small-pt-0.3"]
     for candidate in candidates:
-        if (candidate / "am" / "final.mdl").is_file():
+        if (candidate / "am").is_dir() && (candidate / "conf").is_dir():
             return candidate
     for root in (base,):
         if root.is_dir():
             for child in root.iterdir():
-                if child.is_dir() and (child / "am" / "final.mdl").is_file():
+                if child.is_dir() and (child / "am").is_dir() && (child / "conf").is_dir():
                     return child
 
     local.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,7 @@ def resolve_vosk_model(model_path: str) -> Path:
                     raise RuntimeError("Arquivo do modelo Vosk inválido.")
             z.extractall(destination)
         extracted = local.parent / "vosk-model-small-pt-0.3"
-        if (extracted / "am" / "final.mdl").is_file():
+        if (extracted / "am").is_dir() && (extracted / "conf").is_dir():
             if local.exists():
                 shutil.rmtree(local)
             extracted.rename(local)
