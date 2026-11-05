@@ -27,8 +27,8 @@ jobs:
           Invoke-WebRequest -Uri "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip" -OutFile "vosk-pt.zip"
           Expand-Archive "vosk-pt.zip" -DestinationPath "." -Force
           Rename-Item "vosk-model-small-pt-0.3" "vosk-model"
-          if (!(Test-Path "vosk-model/am/final.mdl")) { throw "Vosk model incomplete before packaging" }
-          Write-Host "Vosk model verified before packaging"
+          if (!(Test-Path "vosk-model/am") -or !(Test-Path "vosk-model/conf")) { throw "Vosk model directories missing" }
+          python -c "from vosk import Model; Model('vosk-model'); print('Vosk model loads successfully')"
       - name: Verify Python syntax
         shell: pwsh
         run: |
