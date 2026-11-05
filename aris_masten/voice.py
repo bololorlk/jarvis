@@ -1,7 +1,7 @@
 """Windows audio input and voices for ARIS / MASTEN.
 
 Speech recognition: offline Vosk PT-BR, native microphone rate converted to
-16 kHz using scipy.signal.resample_poly. No browser speech APIs.
+16 kHz using NumPy interpolation. No browser speech APIs.
 Speech synthesis: Edge TTS (online). Fish Audio remains an optional future
 adapter, not silently simulated.
 """
@@ -19,15 +19,60 @@ VOICES = {
     "MASTEN": {"voice": "pt-BR-FabioNeural", "rate": "+8%", "pitch": "+12Hz"},
 }
 
+def resolve_vosk_model(model_path: str) -> Path:
+    """Find bundled Vosk data or install the official model in persistent user storage."""
+    import shutil
+    import urllib.request
+    import zipfile
+
+    base = Path(model_path)
+    local = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ARIS_MASTEN" / "vosk-model"
+    candidates = [base, base / "vosk-model-small-pt-0.3", local,
+                  local / "vosk-model-small-pt-0.3"]
+    for candidate in candidates:
+        if (candidate / "am" / "final.mdl").is_file():
+            return candidate
+    for root in (base,):
+        if root.is_dir():
+            for child in root.iterdir():
+                if child.is_dir() and (child / "am" / "final.mdl").is_file():
+                    return child
+
+    local.parent.mkdir(parents=True, exist_ok=True)
+    archive = local.parent / "vosk-pt-download.zip"
+    url = "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip"
+    try:
+        urllib.request.urlretrieve(url, archive)
+        with zipfile.ZipFile(archive) as z:
+            # Prevent archive path traversal.
+            destination = local.parent.resolve()
+            for item in z.infolist():
+                target = (destination / item.filename).resolve()
+                if not target.is_relative_to(destination):
+                    raise RuntimeError("Arquivo do modelo Vosk inválido.")
+            z.extractall(destination)
+        extracted = local.parent / "vosk-model-small-pt-0.3"
+        if (extracted / "am" / "final.mdl").is_file():
+            if local.exists():
+                shutil.rmtree(local)
+            extracted.rename(local)
+            return local
+    except Exception as exc:
+        raise RuntimeError(
+            "Modelo de voz Vosk não encontrado no executável e download automático falhou. "
+            "Verifique sua conexão com a internet. Detalhes: " + str(exc)) from exc
+    finally:
+        archive.unlink(missing_ok=True)
+    raise RuntimeError("Modelo Vosk baixado, mas os arquivos de reconhecimento estão incompletos.")
+
+
 def listen_once(model_path: str, seconds: int = 8, device=None):
     """Record one bounded utterance and return (recognized_text, diagnostic)."""
     import numpy as np
     import sounddevice as sd
     from vosk import Model, KaldiRecognizer, SetLogLevel
 
-    path = Path(model_path)
-    if not (path / "am").exists():
-        raise FileNotFoundError(f"Modelo Vosk ausente: {path}")
+    path = resolve_vosk_model(model_path)
     SetLogLevel(-1)
     info = sd.query_devices(device, kind="input")
     rate = int(info["default_samplerate"])
