@@ -27,6 +27,8 @@ jobs:
           Invoke-WebRequest -Uri "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip" -OutFile "vosk-pt.zip"
           Expand-Archive "vosk-pt.zip" -DestinationPath "." -Force
           Rename-Item "vosk-model-small-pt-0.3" "vosk-model"
+          if (!(Test-Path "vosk-model/am/final.mdl")) { throw "Vosk model incomplete before packaging" }
+          Write-Host "Vosk model verified before packaging"
       - name: Verify Python syntax
         shell: pwsh
         run: |
@@ -42,6 +44,7 @@ jobs:
           $size = (Get-Item "dist/ARIS-MASTEN.exe").Length
           if ($size -lt 1000000) { throw "EXE unexpectedly small: $size bytes" }
           Write-Host "EXE verified: $size bytes"
+          python -c "from pathlib import Path; import ast; [ast.parse(p.read_text(encoding='utf-8')) for p in Path('aris_masten').glob('*.py')]; print('Python source syntax verified')"
       - name: Publish direct EXE download (no ZIP)
         shell: pwsh
         env:
