@@ -21,14 +21,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r aris_masten/requirements.txt pyinstaller==6.16.0
-      - name: Download offline Portuguese speech model
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "https://alphacephei.com/vosk/models/vosk-model-small-pt-0.3.zip" -OutFile "vosk-pt.zip"
-          Expand-Archive "vosk-pt.zip" -DestinationPath "." -Force
-          Rename-Item "vosk-model-small-pt-0.3" "vosk-model"
-          if (!(Test-Path "vosk-model/am") -or !(Test-Path "vosk-model/conf")) { throw "Vosk model directories missing" }
-          python -c "from vosk import Model; Model('vosk-model'); print('Vosk model loads successfully')"
       - name: Verify Python syntax
         shell: pwsh
         run: |
@@ -36,7 +28,7 @@ jobs:
       - name: Build desktop EXE
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name ARIS-MASTEN --paths . --add-data "vosk-model;vosk-model" --collect-all vosk --collect-all sounddevice --collect-all edge_tts aris_masten/desktop.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name ARIS-MASTEN --paths . --collect-all vosk --collect-all sounddevice --collect-all edge_tts aris_masten/desktop.py
       - name: Verify executable exists
         shell: pwsh
         run: |
