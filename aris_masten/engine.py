@@ -116,6 +116,28 @@ def read_only_tool(prompt: str) -> str | None:
         return f"Hoje é {now:%d/%m/%Y}."
     return None
 
+def set_system_volume(prompt: str) -> str | None:
+    """Handle explicit 0–100% Windows master-volume requests."""
+    match = re.search(
+        r"\b(?:volume|som|áudio|audio)\s+(?:do\s+(?:pc|computador)\s+)?(?:para|em|a)\s+(\d{1,3})\s*%?\b"
+        r"|\b(?:aumenta|aumente|abaixa|abaixe|coloca|coloque|define|defina|ajusta|ajuste)\s+"
+        r"(?:o\s+)?(?:volume|som|áudio|audio)\s+(?:do\s+(?:pc|computador)\s+)?"
+        r"(?:para|em|a)\s+(\d{1,3})\s*%?\b",
+        prompt.lower(), flags=re.I)
+    if not match:
+        return None
+    level = int(next(group for group in match.groups() if group is not None))
+    if not 0 <= level <= 100:
+        return "O volume precisa estar entre 0 e 100%."
+    if os.name != "nt":
+        raise RuntimeError("Controle de volume disponível apenas no Windows.")
+    from pycaw.pycaw import AudioUtilities
+    endpoint = AudioUtilities.GetSpeakers().EndpointVolume
+    endpoint.SetMasterVolumeLevelScalar(level / 100, None)
+    if level:
+        endpoint.SetMute(0, None)
+    return f"Volume ajustado para {level}%."
+
 def plan_action(prompt: str) -> dict | None:
     """Actions require an explicit follow-up confirmation in the caller."""
     p = prompt.lower()
