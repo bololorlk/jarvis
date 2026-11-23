@@ -2,7 +2,7 @@ name: ARIS MASTEN Windows build
 on:
   workflow_dispatch:
   push:
-    branches: [main, feature/aris-masten-windows]
+    branches: [main, feature/aris-masten-windows, feature/hands-free-volume]
     paths:
       - "aris_masten/**"
       - ".github/workflows/aris-masten-windows.yml"
