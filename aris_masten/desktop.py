@@ -10,7 +10,6 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
 
 from aris_masten import engine, voice
 
@@ -226,7 +225,7 @@ class Desktop:
                 if answer is None:
                     action = engine.plan_action(text)
                     if action:
-                        self.events.put(("confirm", action))
+                        self.events.put(("action_done", profile, engine.execute_confirmed(action)))
                         return
                     answer = engine.ask(profile, text)
                 self.events.put(("answer", profile, answer))
@@ -297,19 +296,12 @@ class Desktop:
                     self.set_status("PRONTO")
                     self.append(profile, answer)
                     self.speak(profile, answer)
-                elif kind == "confirm":
-                    action = args[0]
+                elif kind == "action_done":
+                    profile, message = args
                     self.busy = False
-                    self.set_status("AGUARDANDO CONFIRMAÇÃO")
-                    self.append("SISTEMA", "Confirmar ação: " + action["label"] + "?")
-                    if messagebox.askyesno("Confirmar ação", "Deseja " + action["label"] + "?"):
-                        try:
-                            self.append("SISTEMA", engine.execute_confirmed(action))
-                        except Exception as exc:
-                            self.append("ERRO", str(exc))
-                    else:
-                        self.append("SISTEMA", "Ação cancelada.")
                     self.set_status("PRONTO")
+                    self.append(profile, message)
+                    self.speak(profile, message)
                 elif kind == "voice_error":
                     self.append("VOZ", "Falha na síntese/reprodução: " + args[0])
                 elif kind == "error":
