@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox
@@ -33,9 +34,13 @@ class Desktop:
         self.history = []
         self.logs = {"ARIS": [], "MASTEN": []}
         self.play_process = None
+        self.running = True
+        self.microphone_paused = threading.Event()
+        self.wake_deadline = 0.0
         self._build()
         self.root.after(80, self.poll)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
+        threading.Thread(target=self.listen_forever, daemon=True).start()
 
     def _build(self):
         self.root.configure(bg=BG)
@@ -78,11 +83,8 @@ class Desktop:
 
         self.controls = tk.Frame(self.root, bg=BG)
         self.controls.pack(fill="x", padx=30, pady=(8, 22))
-        self.listen_btn = tk.Button(self.controls, text="🎙 FALAR",
-                                    command=self.listen, bg="#173650", fg=WHITE,
-                                    relief="flat", font=("Segoe UI", 11, "bold"),
-                                    padx=15, pady=12)
-        self.listen_btn.pack(side="left", padx=(0, 8))
+        tk.Label(self.controls, text="● MICROFONE AUTOMÁTICO", fg=BLUE, bg=BG,
+                 font=("Consolas", 9, "bold")).pack(side="left", padx=(0, 12))
         self.input = tk.Entry(self.controls, bg=PANEL, fg=WHITE, insertbackground=WHITE,
                               relief="flat", font=("Segoe UI", 12))
         self.input.pack(side="left", fill="x", expand=True, ipady=13)
@@ -109,7 +111,6 @@ class Desktop:
                           highlightbackground=accent)
         self.section.configure(text="TECH / WORK / PROJECTS" if profile == "ARIS"
                                else "LIFESTYLE / MUSIC / CULTURE")
-        self.listen_btn.configure(bg="#173650" if profile == "ARIS" else "#302247")
         self.set_status("PRONTO")
         self.render_log()
         self.draw()
@@ -181,20 +182,19 @@ class Desktop:
         self.input.delete(0, "end")
         self.submit(text)
 
-    def listen(self):
-        if self.busy:
-            self.append("SISTEMA", "Aguarde a resposta atual.")
-            return
-        self.busy = True
-        self.set_status("OUVINDO 8 SEGUNDOS")
-        self.listen_btn.configure(state="disabled")
-        def work():
+    def listen_forever(self):
+        """Record continuously in bounded phrases; only wake names trigger commands."""
+        while self.running:
+            if self.microphone_paused.is_set() or self.busy:
+                time.sleep(.15)
+                continue
             try:
-                text, diagnostics = voice.listen_once(str(VOSK), seconds=8)
-                self.events.put(("heard", text, diagnostics))
+                text, diagnostics = voice.listen_once(str(VOSK), seconds=7)
+                if text:
+                    self.events.put(("heard", text, diagnostics))
             except Exception as exc:
-                self.events.put(("error", "Microfone: " + str(exc)))
-        threading.Thread(target=work, daemon=True).start()
+                self.events.put(("mic_error", str(exc)))
+                time.sleep(3)
 
     def submit(self, text):
         if not text:
@@ -222,6 +222,8 @@ class Desktop:
             try:
                 answer = engine.read_only_tool(text)
                 if answer is None:
+                    answer = engine.set_system_volume(text)
+                if answer is None:
                     action = engine.plan_action(text)
                     if action:
                         self.events.put(("confirm", action))
@@ -233,6 +235,7 @@ class Desktop:
         threading.Thread(target=work, daemon=True).start()
 
     def speak(self, profile, text):
+        self.microphone_paused.set()
         def work():
             try:
                 mp3 = voice.speak(profile, text)
@@ -247,8 +250,20 @@ class Desktop:
                 if code:
                     raise RuntimeError(f"Windows MCI open error {code}")
                 mci(f"play {alias}", None, 0, None)
+                # Don't let the mic re-hear the assistant's own spoken reply.
+                status = __import__("ctypes").create_unicode_buffer(64)
+                for _ in range(600):
+                    if not self.running:
+                        break
+                    mci(f"status {alias} mode", status, len(status), None)
+                    if status.value.lower() != "playing":
+                        break
+                    time.sleep(.1)
             except Exception as exc:
                 self.events.put(("voice_error", str(exc)))
+            finally:
+                time.sleep(.35)
+                self.microphone_paused.clear()
         threading.Thread(target=work, daemon=True).start()
 
     def stop_audio(self):
@@ -262,13 +277,19 @@ class Desktop:
             while True:
                 kind, *args = self.events.get_nowait()
                 if kind == "heard":
-                    self.busy = False
-                    self.listen_btn.configure(state="normal")
                     text, diagnostics = args
-                    self.append("MIC", f"Reconhecido: {text or '(nenhuma palavra)'} | "
-                                f"Entrada: {diagnostics['device']} | Pico: {diagnostics['peak']}")
-                    self.set_status("PRONTO")
-                    if text:
+                    names = re.search(r"\b(aris|áris|masten)\b", text, re.I)
+                    if names:
+                        self.wake_deadline = time.monotonic() + 10
+                        remaining = re.sub(r"\b(aris|áris|masten)\b", "", text, flags=re.I).strip(" ,.!?")
+                        if remaining:
+                            self.wake_deadline = 0
+                            self.submit(text)
+                        else:
+                            self.switch_profile("MASTEN" if names.group().lower() == "masten" else "ARIS")
+                            self.set_status("ESCUTANDO COMANDO")
+                    elif time.monotonic() < self.wake_deadline:
+                        self.wake_deadline = 0
                         self.submit(text)
                 elif kind == "answer":
                     profile, answer = args
@@ -293,14 +314,17 @@ class Desktop:
                     self.append("VOZ", "Falha na síntese/reprodução: " + args[0])
                 elif kind == "error":
                     self.busy = False
-                    self.listen_btn.configure(state="normal")
                     self.set_status("ERRO")
                     self.append("ERRO", args[0])
+                elif kind == "mic_error":
+                    self.set_status("MICROFONE INDISPONÍVEL")
+                    self.append("MIC", args[0] + " (nova tentativa em 3 segundos)")
         except queue.Empty:
             pass
         self.root.after(80, self.poll)
 
     def close(self):
+        self.running = False
         self.stop_audio()
         self.root.destroy()
 
