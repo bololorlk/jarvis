@@ -20,7 +20,9 @@ Instale Python 3.12 e Ollama. Baixe o repositório pelo GitHub e execute `aris_m
 - Qwen2.5 3B pelo Ollama, com histórico curto por perfil salvo em `%LOCALAPPDATA%/ARIS_MASTEN/history.json`.
 - ARIS: voz masculina Antonio Neural, mais grave.
 - MASTEN: voz masculina Fabio Neural, mais leve e amigável.
-- Respostas em voz via Edge TTS, que requer conexão à internet.
+- Respostas em voz via Edge TTS; quando a rede bloquear a síntese online, usa a voz SAPI disponível no Windows como alternativa offline (a voz e idioma dependem do que está instalado no computador).
+- O modelo de reconhecimento Vosk PT é incluído no executável gerado pelo GitHub Actions.
+- Painel estilo HUD com módulos de Gmail, WhatsApp, Instagram, Spotify, agenda e automação, ainda **não vinculados a contas**.
 - Ferramentas locais: hora/data e abertura direta de calculadora, bloco de notas e explorador, sem confirmação. Outras ações não são liberadas automaticamente.
 
 ## Limitações importantes
