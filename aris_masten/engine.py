@@ -147,7 +147,7 @@ def plan_action(prompt: str) -> dict | None:
         "explorador de arquivos": ["explorer.exe"],
     }
     for label, argv in programs.items():
-        if "abrir " + label in p or "abre " + label in p:
+        if re.search(r"\\b(?:abrir|abre|abra)\\s+(?:a|o)?\\s*" + re.escape(label) + r"\\b", p):
             return {"label": f"abrir {label}", "argv": argv}
     return None
 
