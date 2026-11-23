@@ -12,6 +12,7 @@ import re
 import subprocess
 import urllib.error
 import urllib.request
+import webbrowser
 from pathlib import Path
 
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ARIS_MASTEN"
@@ -145,14 +146,45 @@ def plan_action(prompt: str) -> dict | None:
         "calculadora": ["calc.exe"],
         "bloco de notas": ["notepad.exe"],
         "explorador de arquivos": ["explorer.exe"],
+        "navegador": ["msedge.exe"],
+        "edge": ["msedge.exe"],
+        "chrome": ["chrome.exe"],
     }
+    websites = {
+        "youtube": "https://www.youtube.com",
+        "google": "https://www.google.com",
+        "gmail": "https://mail.google.com",
+        "whatsapp": "https://web.whatsapp.com",
+        "whatsapp web": "https://web.whatsapp.com",
+        "instagram": "https://www.instagram.com",
+        "spotify": "https://open.spotify.com",
+        "github": "https://github.com",
+    }
+    if re.search(r"\b(?:abrir|abre|abra|acesse|acessar|entra|entre)\b", p):
+        for name, url in sorted(websites.items(), key=lambda item: -len(item[0])):
+            if re.search(r"\b" + re.escape(name) + r"\b", p):
+                return {"label": f"abrir {name}", "url": url}
+        domain = re.search(r"\b(?:site|página|pagina|endereço|endereco)\s+"
+                           r"(?:do|da|de)?\s*([a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+)\b", p)
+        if domain:
+            return {"label": f"abrir {domain.group(1)}", "url": "https://" + domain.group(1)}
     for label, argv in programs.items():
         if re.search(r"\b(?:abrir|abre|abra)\s+(?:a|o)?\s*" + re.escape(label) + r"\b", p):
             return {"label": f"abrir {label}", "argv": argv}
     return None
 
 def execute_confirmed(action: dict) -> str:
-    allowed = {("calc.exe",), ("notepad.exe",), ("explorer.exe",)}
+    from urllib.parse import urlsplit
+    if "url" in action:
+        url = str(action["url"])
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Endereço de site inválido")
+        if not webbrowser.open_new_tab(url):
+            raise RuntimeError("Não foi possível abrir o navegador.")
+        return f"Abrindo {parsed.hostname}."
+    allowed = {("calc.exe",), ("notepad.exe",), ("explorer.exe",),
+               ("msedge.exe",), ("chrome.exe",)}
     argv = tuple(action.get("argv", []))
     if argv not in allowed:
         raise ValueError("Ação não autorizada")
