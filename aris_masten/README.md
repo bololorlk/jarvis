@@ -21,7 +21,7 @@ Instale Python 3.12 e Ollama. Baixe o repositório pelo GitHub e execute `aris_m
 - ARIS: voz masculina Antonio Neural, mais grave.
 - MASTEN: voz masculina Fabio Neural, mais leve e amigável.
 - Respostas em voz via Edge TTS, que requer conexão à internet.
-- Ferramentas locais: hora/data e abertura de calculadora, bloco de notas e explorador, após confirmação visual.
+- Ferramentas locais: hora/data e abertura direta de calculadora, bloco de notas e explorador, sem confirmação. Outras ações não são liberadas automaticamente.
 
 ## Limitações importantes
 
