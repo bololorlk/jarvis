@@ -126,7 +126,33 @@ async def synthesize(profile: str, text: str, destination: str):
     await communicate.save(destination)
 
 def speak(profile: str, text: str):
-    """Return MP3 path; caller handles playback and cleanup."""
+    """Return an audio path; fall back to offline Windows SAPI if Edge is blocked."""
     path = Path(tempfile.gettempdir()) / ("aris_masten_" + profile.lower() + ".mp3")
-    asyncio.run(synthesize(profile, text, str(path)))
-    return path
+    try:
+        asyncio.run(asyncio.wait_for(synthesize(profile, text, str(path)), timeout=9))
+        return path
+    except Exception:
+        if os.name != "nt":
+            raise
+        import base64
+        import subprocess
+        wav = path.with_suffix(".wav")
+        def quoted(value):
+            return "'" + str(value).replace("'", "''") + "'"
+        # SAPI uses voices installed with Windows; it does not need a network.
+        rate = -2 if profile.upper() == "ARIS" else 1
+        script = (
+            "Add-Type -AssemblyName System.Speech; "
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            "try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male) } catch {}; "
+            f"$s.Rate = {rate}; "
+            f"$s.SetOutputToWaveFile({quoted(wav)}); "
+            f"$s.Speak({quoted(text)}); $s.Dispose()"
+        )
+        encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                       check=True, capture_output=True, timeout=45, creationflags=flags)
+        if not wav.is_file() or wav.stat().st_size < 44:
+            raise RuntimeError("A voz offline do Windows não gerou áudio.")
+        return wav
