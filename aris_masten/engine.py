@@ -12,6 +12,7 @@ import re
 import subprocess
 import urllib.error
 import urllib.request
+import webbrowser
 from pathlib import Path
 
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ARIS_MASTEN"
@@ -116,6 +117,28 @@ def read_only_tool(prompt: str) -> str | None:
         return f"Hoje é {now:%d/%m/%Y}."
     return None
 
+def set_system_volume(prompt: str) -> str | None:
+    """Handle explicit 0–100% Windows master-volume requests."""
+    match = re.search(
+        r"\b(?:volume|som|áudio|audio)\s+(?:do\s+(?:pc|computador)\s+)?(?:para|em|a)\s+(\d{1,3})\s*%?\b"
+        r"|\b(?:aumenta|aumente|abaixa|abaixe|coloca|coloque|define|defina|ajusta|ajuste)\s+"
+        r"(?:o\s+)?(?:volume|som|áudio|audio)\s+(?:do\s+(?:pc|computador)\s+)?"
+        r"(?:para|em|a)\s+(\d{1,3})\s*%?\b",
+        prompt.lower(), flags=re.I)
+    if not match:
+        return None
+    level = int(next(group for group in match.groups() if group is not None))
+    if not 0 <= level <= 100:
+        return "O volume precisa estar entre 0 e 100%."
+    if os.name != "nt":
+        raise RuntimeError("Controle de volume disponível apenas no Windows.")
+    from pycaw.pycaw import AudioUtilities
+    endpoint = AudioUtilities.GetSpeakers().EndpointVolume
+    endpoint.SetMasterVolumeLevelScalar(level / 100, None)
+    if level:
+        endpoint.SetMute(0, None)
+    return f"Volume ajustado para {level}%."
+
 def plan_action(prompt: str) -> dict | None:
     """Actions require an explicit follow-up confirmation in the caller."""
     p = prompt.lower()
@@ -123,14 +146,45 @@ def plan_action(prompt: str) -> dict | None:
         "calculadora": ["calc.exe"],
         "bloco de notas": ["notepad.exe"],
         "explorador de arquivos": ["explorer.exe"],
+        "navegador": ["msedge.exe"],
+        "edge": ["msedge.exe"],
+        "chrome": ["chrome.exe"],
     }
+    websites = {
+        "youtube": "https://www.youtube.com",
+        "google": "https://www.google.com",
+        "gmail": "https://mail.google.com",
+        "whatsapp": "https://web.whatsapp.com",
+        "whatsapp web": "https://web.whatsapp.com",
+        "instagram": "https://www.instagram.com",
+        "spotify": "https://open.spotify.com",
+        "github": "https://github.com",
+    }
+    if re.search(r"\b(?:abrir|abre|abra|acesse|acessar|entra|entre)\b", p):
+        for name, url in sorted(websites.items(), key=lambda item: -len(item[0])):
+            if re.search(r"\b" + re.escape(name) + r"\b", p):
+                return {"label": f"abrir {name}", "url": url}
+        domain = re.search(r"\b(?:site|página|pagina|endereço|endereco)\s+"
+                           r"(?:do|da|de)?\s*([a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+)\b", p)
+        if domain:
+            return {"label": f"abrir {domain.group(1)}", "url": "https://" + domain.group(1)}
     for label, argv in programs.items():
-        if "abrir " + label in p or "abre " + label in p:
+        if re.search(r"\b(?:abrir|abre|abra)\s+(?:a|o)?\s*" + re.escape(label) + r"\b", p):
             return {"label": f"abrir {label}", "argv": argv}
     return None
 
 def execute_confirmed(action: dict) -> str:
-    allowed = {("calc.exe",), ("notepad.exe",), ("explorer.exe",)}
+    from urllib.parse import urlsplit
+    if "url" in action:
+        url = str(action["url"])
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Endereço de site inválido")
+        if not webbrowser.open_new_tab(url):
+            raise RuntimeError("Não foi possível abrir o navegador.")
+        return f"Abrindo {parsed.hostname}."
+    allowed = {("calc.exe",), ("notepad.exe",), ("explorer.exe",),
+               ("msedge.exe",), ("chrome.exe",)}
     argv = tuple(action.get("argv", []))
     if argv not in allowed:
         raise ValueError("Ação não autorizada")

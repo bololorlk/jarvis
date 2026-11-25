@@ -29,13 +29,16 @@ def resolve_vosk_model(model_path: str) -> Path:
     local = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ARIS_MASTEN" / "vosk-model"
     candidates = [base, base / "vosk-model-small-pt-0.3", local,
                   local / "vosk-model-small-pt-0.3"]
+    def valid(candidate):
+        return ((candidate / "am" / "final.mdl").is_file() and (candidate / "conf").is_dir()) or \
+               ((candidate / "final.mdl").is_file() and (candidate / "mfcc.conf").is_file())
     for candidate in candidates:
-        if (candidate / "am").is_dir() and (candidate / "conf").is_dir():
+        if valid(candidate):
             return candidate
     for root in (base,):
         if root.is_dir():
             for child in root.iterdir():
-                if child.is_dir() and (child / "am").is_dir() and (child / "conf").is_dir():
+                if child.is_dir() and valid(child):
                     return child
 
     local.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +55,7 @@ def resolve_vosk_model(model_path: str) -> Path:
                     raise RuntimeError("Arquivo do modelo Vosk inválido.")
             z.extractall(destination)
         extracted = local.parent / "vosk-model-small-pt-0.3"
-        if (extracted / "am").is_dir() and (extracted / "conf").is_dir():
+        if valid(extracted):
             if local.exists():
                 shutil.rmtree(local)
             extracted.rename(local)
@@ -126,7 +129,35 @@ async def synthesize(profile: str, text: str, destination: str):
     await communicate.save(destination)
 
 def speak(profile: str, text: str):
-    """Return MP3 path; caller handles playback and cleanup."""
+    """Return an audio path; fall back to offline Windows SAPI if Edge is blocked."""
     path = Path(tempfile.gettempdir()) / ("aris_masten_" + profile.lower() + ".mp3")
-    asyncio.run(synthesize(profile, text, str(path)))
-    return path
+    try:
+        asyncio.run(asyncio.wait_for(synthesize(profile, text, str(path)), timeout=9))
+        if not path.is_file() or path.stat().st_size < 128:
+            raise RuntimeError("Serviço de voz não retornou áudio.")
+        return path
+    except Exception:
+        if os.name != "nt":
+            raise
+        import base64
+        import subprocess
+        wav = path.with_suffix(".wav")
+        def quoted(value):
+            return "'" + str(value).replace("'", "''") + "'"
+        # SAPI uses voices installed with Windows; it does not need a network.
+        rate = -2 if profile.upper() == "ARIS" else 1
+        script = (
+            "Add-Type -AssemblyName System.Speech; "
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            "try { $s.SelectVoiceByHints([System.Speech.Synthesis.VoiceGender]::Male) } catch {}; "
+            f"$s.Rate = {rate}; "
+            f"$s.SetOutputToWaveFile({quoted(wav)}); "
+            f"$s.Speak({quoted(text)}); $s.Dispose()"
+        )
+        encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                       check=True, capture_output=True, timeout=45, creationflags=flags)
+        if not wav.is_file() or wav.stat().st_size < 44:
+            raise RuntimeError("A voz offline do Windows não gerou áudio.")
+        return wav
